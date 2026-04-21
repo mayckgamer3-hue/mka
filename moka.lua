@@ -8,43 +8,12 @@ local holdMode  = false
 local KPS       = 80
 local interval  = 1 / KPS
 
--- ─── PI Controller ────────────────────────────────────────────────────────
-local pi_integral     = 0
-local PI_INTEGRAL_CAP = 2 * interval
-local PI_DEADBAND     = interval * 0.015
-local PI_KP           = 0.35
-local PI_KI           = 0.012
-local EMA_ALPHA       = 0.12
-local EMA_ONE_MINUS   = 1 - EMA_ALPHA
-local PI_DECAY        = 1 - (1/512)
-
-local drift_accum = 0
-local pi_residual = 0
-
-local tick_n_absolute  = 0
-local suppressed_count = 0
-local session_start    = 0
-local ema_error        = 0
-local phase_offset     = 0
-
-local nano_cd  = 16
-local micro_cd = 64
-
-local NANO_CLAMP      = interval * 0.2
-local MICRO_CLAMP     = interval * 0.4
-local NANO_GAIN       = 0.05
-local MICRO_GAIN      = 0.15
-local HALF_INTERVAL   = interval * 0.5
-local MAX_LAG         = interval
-
--- ─── Ring buffer for real-time KPS ────────────────────────────────────────
 local RING_SIZE      = 512
 local ring           = table.create(RING_SIZE, 0)
 local ring_head      = 0
 local last_tier      = -1
 local last_count_str = "0"
 
--- ─── Keys ─────────────────────────────────────────────────────────────────
 local TOGGLE_KEY = Enum.KeyCode.E
 local SPAM_KEY1  = Enum.KeyCode.F
 local SPAM_KEY2  = Enum.KeyCode.Unknown
@@ -54,22 +23,20 @@ local SPAM_KEY4  = Enum.KeyCode.Unknown
 local spam_keys_enabled = {true, false, false, false}
 local spam_keys         = {SPAM_KEY1, SPAM_KEY2, SPAM_KEY3, SPAM_KEY4}
 
--- ─── Services / shortcuts ─────────────────────────────────────────────────
 local UIS          = game:GetService("UserInputService")
 local VIM          = game:GetService("VirtualInputManager")
 local TweenService = game:GetService("TweenService")
+local RunService   = game:GetService("RunService")
 local Players      = game:GetService("Players")
 local player       = Players.LocalPlayer
 local playerGui    = player:WaitForChild("PlayerGui")
 
 local hrt       = os.clock
-local task_wait = task.wait
 local m_floor   = math.floor
 local m_abs     = math.abs
 local m_clamp   = math.clamp
 local tostr     = tostring
 
--- ─── Colors (Coffee / Amber theme) ────────────────────────────────────────
 local C_BG        = Color3.fromRGB(10,  8,   6)
 local C_BG2       = Color3.fromRGB(18,  14,  10)
 local C_BG3       = Color3.fromRGB(28,  22,  16)
@@ -81,7 +48,6 @@ local C_GREY      = Color3.fromRGB(140, 128, 110)
 local C_DARK_STK  = Color3.fromRGB(55,  42,  25)
 local C_ON_STK    = Color3.fromRGB(255, 165, 50)
 
--- ─── TweenInfos ───────────────────────────────────────────────────────────
 local TI_02  = TweenInfo.new(0.2)
 local TI_03  = TweenInfo.new(0.3)
 local TI_015 = TweenInfo.new(0.15)
@@ -89,19 +55,9 @@ local TI_04  = TweenInfo.new(0.4, Enum.EasingStyle.Quad,  Enum.EasingDirection.O
 local TI_05  = TweenInfo.new(0.5, Enum.EasingStyle.Quad,  Enum.EasingDirection.Out)
 local TI_06  = TweenInfo.new(0.6, Enum.EasingStyle.Back,  Enum.EasingDirection.Out)
 
--- ══════════════════════════════════════════════════════════════════════════
---  CORE LOGIC
--- ══════════════════════════════════════════════════════════════════════════
-
 local function applyKPS(newKPS)
-    KPS             = m_clamp(newKPS, 1, 2000)
-    interval        = 1 / KPS
-    PI_INTEGRAL_CAP = 2 * interval
-    PI_DEADBAND     = interval * 0.015
-    NANO_CLAMP      = interval * 0.2
-    MICRO_CLAMP     = interval * 0.4
-    HALF_INTERVAL   = interval * 0.5
-    MAX_LAG         = interval
+    KPS      = m_clamp(newKPS, 1, 2000)
+    interval = 1 / KPS
 end
 
 local function fireAllKeys()
@@ -114,113 +70,33 @@ local function fireAllKeys()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════
---  FPS FIX: eliminado busy-wait loop, reemplazado con task.wait()
+--  IDLE LOOP — corre siempre, dispara solo cuando clicking = true
 -- ══════════════════════════════════════════════════════════════════════════
-local function spam_loop()
-    task_wait(0.05)
-    if not clicking then return end
+local accum = 0
 
-    pi_integral      = 0
-    pi_residual      = 0
-    ema_error        = 0
-    drift_accum      = 0
-    tick_n_absolute  = 0
-    suppressed_count = 0
-    phase_offset     = 0
-    nano_cd          = 16
-    micro_cd         = 64
-    ring_head        = 0
-    for i = 1, RING_SIZE do ring[i] = 0 end
-    EMA_ONE_MINUS = 1 - EMA_ALPHA
-
-    session_start = hrt()
-
-    while clicking do
-        local next_fire = session_start
-            + (tick_n_absolute - suppressed_count) * interval
-            + phase_offset
-
-        -- FPS FIX: sin busy-wait, cedemos el hilo a Roblox
-        local remaining = next_fire - hrt()
-        if remaining > 0.001 then
-            task_wait(remaining * 0.85)
-        end
-        task_wait() -- cede el hilo para que Roblox renderice
-
-        if not clicking then break end
-
-        local fire_time = hrt()
-        fireAllKeys()
-
-        tick_n_absolute = tick_n_absolute + 1
-        ring_head       = (ring_head % RING_SIZE) + 1
-        ring[ring_head] = fire_time
-
-        local abs_elapsed  = fire_time - session_start
-        local abs_expected = (tick_n_absolute - suppressed_count) * interval
-
-        -- Nano correction (every 16 ticks)
-        nano_cd = nano_cd - 1
-        if nano_cd == 0 then
-            nano_cd = 16
-            local err = abs_elapsed - abs_expected
-            if err >  NANO_CLAMP then err =  NANO_CLAMP
-            elseif err < -NANO_CLAMP then err = -NANO_CLAMP end
-            phase_offset = phase_offset - err * NANO_GAIN
-        end
-
-        -- Micro correction (every 64 ticks)
-        micro_cd = micro_cd - 1
-        if micro_cd == 0 then
-            micro_cd = 64
-            local err = abs_elapsed - abs_expected
-            if err >  MICRO_CLAMP then err =  MICRO_CLAMP
-            elseif err < -MICRO_CLAMP then err = -MICRO_CLAMP end
-            phase_offset = phase_offset - err * MICRO_GAIN
-        end
-
-        -- PI Controller
-        local raw_error = abs_elapsed - abs_expected
-        ema_error = EMA_ONE_MINUS * ema_error + EMA_ALPHA * raw_error
-        local error = ema_error
-
-        if error > PI_DEADBAND or error < -PI_DEADBAND then
-            pi_integral = pi_integral + error
-            if pi_integral >  PI_INTEGRAL_CAP then pi_integral =  PI_INTEGRAL_CAP
-            elseif pi_integral < -PI_INTEGRAL_CAP then pi_integral = -PI_INTEGRAL_CAP end
-            local correction = PI_KP * error + PI_KI * pi_integral
-            drift_accum = drift_accum + correction
-            local carry = m_floor(drift_accum / interval + 0.5) * interval
-            drift_accum = drift_accum - carry
-            pi_residual = pi_residual + (correction - carry)
-            local res_carry = m_floor(pi_residual / interval + 0.5) * interval
-            pi_residual = pi_residual - res_carry
-            phase_offset = phase_offset - correction
-        else
-            pi_integral = pi_integral * PI_DECAY
-        end
-
-        -- Lag recovery
-        local now        = hrt()
-        local next_ideal = session_start
-            + (tick_n_absolute - suppressed_count) * interval
-            + phase_offset
-        local lag = now - next_ideal
-
-        if lag > MAX_LAG then
-            session_start = now
-                - (tick_n_absolute - suppressed_count) * interval
-                - phase_offset
-            suppressed_count = suppressed_count + 1
-        elseif lag > HALF_INTERVAL then
-            session_start = session_start + lag * 0.5
-        end
+RunService.Heartbeat:Connect(function(dt)
+    if not clicking then
+        accum = 0
+        return
     end
-end
+
+    accum = accum + dt
+    local shots = m_floor(accum / interval)
+    accum = accum - shots * interval
+
+    local now = hrt()
+    for _ = 1, shots do
+        fireAllKeys()
+        ring_head       = (ring_head % RING_SIZE) + 1
+        ring[ring_head] = now
+    end
+end)
 
 -- ══════════════════════════════════════════════════════════════════════════
---  GUI  (GUI más ancha: 260px → 320px)
+--  GUI
 -- ══════════════════════════════════════════════════════════════════════════
+local FRAME_W = 320
+local FRAME_H = 440
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name            = "MokaGUI"
@@ -257,11 +133,6 @@ local function label(parent, text, size, color, font, xalign)
     return l
 end
 
--- ─── Dimensiones GUI más ancha ────────────────────────────────────────────
-local FRAME_W = 320
-local FRAME_H = 440
-
--- ─── Title badge ──────────────────────────────────────────────────────────
 local titleBox = Instance.new("Frame")
 titleBox.Name                = "TitleBox"
 titleBox.Size                = UDim2.new(0, 120, 0, 38)
@@ -284,7 +155,6 @@ titleBtn.BackgroundTransparency = 1
 titleBtn.Text                = ""
 titleBtn.Parent              = titleBox
 
--- ─── Main frame ───────────────────────────────────────────────────────────
 local frame = Instance.new("Frame")
 frame.Name               = "MainFrame"
 frame.Size               = UDim2.new(0, FRAME_W, 0, FRAME_H)
@@ -306,7 +176,6 @@ topBar.BorderSizePixel   = 0
 topBar.BackgroundTransparency = 0.3
 topBar.Parent            = frame
 
--- ─── Close button ─────────────────────────────────────────────────────────
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size            = UDim2.new(0, 22, 0, 22)
 closeBtn.Position        = UDim2.new(1, -30, 0, 7)
@@ -327,7 +196,6 @@ closeBtn.MouseLeave:Connect(function()
     TweenService:Create(closeBtn, TI_02, {TextColor3 = C_GREY}):Play()
 end)
 
--- ─── Header ───────────────────────────────────────────────────────────────
 local headerLbl = label(frame, "MOKA",
     UDim2.new(1, 0, 0, 40), C_AMBER, Enum.Font.GothamBold)
 headerLbl.Position = UDim2.new(0, 0, 0, 8)
@@ -344,7 +212,6 @@ statusDot.BorderSizePixel = 0
 statusDot.Parent          = frame
 corner(statusDot, 10)
 
--- ─── KPS display (más ancho) ──────────────────────────────────────────────
 local kpsBg = Instance.new("Frame")
 kpsBg.Size             = UDim2.new(1, -24, 0, 70)
 kpsBg.Position         = UDim2.new(0, 12, 0, 78)
@@ -368,13 +235,11 @@ local kpsTarget = label(kpsBg, "TARGET: 80",
 kpsTarget.Position = UDim2.new(0.55, 0, 0, 28)
 kpsTarget.TextXAlignment = Enum.TextXAlignment.Left
 
--- FPS label (nuevo)
-local fpsLabel = label(kpsBg, "FPS-SAFE MODE",
+local fpsLabel = label(kpsBg, "INSTANT START",
     UDim2.new(0.45, -8, 0, 13), Color3.fromRGB(80, 180, 80), Enum.Font.Gotham)
 fpsLabel.Position = UDim2.new(0.55, 0, 0, 46)
 fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
 
--- ─── Helpers ──────────────────────────────────────────────────────────────
 local function divider(y)
     local d = Instance.new("Frame")
     d.Size             = UDim2.new(1, -24, 0, 1)
@@ -408,7 +273,6 @@ local function makeKeyBtn(txt, x, y, w)
     return btn, s
 end
 
--- ─── KPS row ──────────────────────────────────────────────────────────────
 divider(158)
 rowLabel("KPS TARGET:", 166)
 
@@ -440,7 +304,6 @@ btnPlus.Font             = Enum.Font.GothamBold
 btnPlus.Parent           = frame
 corner(btnPlus, 7)
 
--- Presets (más espacio con GUI ancha)
 local presetRow = Instance.new("Frame")
 presetRow.Size             = UDim2.new(1, -24, 0, 20)
 presetRow.Position         = UDim2.new(0, 12, 0, 216)
@@ -470,7 +333,6 @@ for _, v in ipairs(presets) do
     table.insert(presetBtns, {btn=pb, val=v})
 end
 
--- ─── Mode row ─────────────────────────────────────────────────────────────
 divider(244)
 rowLabel("MODE:", 252)
 
@@ -487,12 +349,10 @@ modeBtn.Parent           = frame
 corner(modeBtn, 6)
 local modeStroke = stroke(modeBtn, C_DARK_STK, 1)
 
--- ─── ACTIVATE row ─────────────────────────────────────────────────────────
 divider(280)
 rowLabel("ACTIVATE KEY:", 288)
 local activateBtn, activateStroke = makeKeyBtn("E", FRAME_W - 74, 285)
 
--- ─── 4 Spam Keys (grid 2x2 más ancho) ────────────────────────────────────
 divider(318)
 rowLabel("SPAM KEYS:", 326)
 
@@ -533,7 +393,6 @@ for i, def in ipairs(spamBtnDefs) do
     spamStrokes[i] = s
 end
 
--- ─── Open / Close helpers ─────────────────────────────────────────────────
 local mainOpen = false
 
 local function openMainGui()
@@ -571,7 +430,6 @@ local function closeMainGui()
     end)
 end
 
--- ─── Title badge interactions ─────────────────────────────────────────────
 local tbDidDrag = false
 
 titleBtn.MouseEnter:Connect(function()
@@ -589,6 +447,7 @@ end)
 closeBtn.MouseButton1Click:Connect(function()
     if clicking then
         clicking = false
+        accum = 0
         TweenService:Create(statusDot, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
         TweenService:Create(mainStroke,TI_02, {Color = C_DARK_STK}):Play()
         kpsNumber.Text = "0"
@@ -597,23 +456,21 @@ closeBtn.MouseButton1Click:Connect(function()
     closeMainGui()
 end)
 
--- ─── Startup animation ────────────────────────────────────────────────────
 task.spawn(function()
-    task_wait(0.3)
+    task.wait(0.3)
     titleBox.Visible = true
     TweenService:Create(titleBox,    TI_05, {BackgroundTransparency = 0}):Play()
     TweenService:Create(titleStroke, TI_05, {Transparency = 0}):Play()
-    task_wait(0.1)
+    task.wait(0.1)
     TweenService:Create(titleLabel,
         TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         {TextTransparency = 0}):Play()
-    task_wait(0.7)
+    task.wait(0.7)
     TweenService:Create(titleStroke, TI_03, {Color = C_ON_STK}):Play()
-    task_wait(0.4)
+    task.wait(0.4)
     TweenService:Create(titleStroke, TI_03, {Color = C_DARK_STK}):Play()
 end)
 
--- ─── Key-bind helper ──────────────────────────────────────────────────────
 local waitingForKey = false
 
 local function bindKey(btn, btnStroke, blockedKeys, onSuccess)
@@ -684,11 +541,6 @@ for i = 1, 4 do
             btn.TextColor3 = C_AMBER
             TweenService:Create(btn, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
             TweenService:Create(s,   TI_02, {Color = C_AMBER_DIM}):Play()
-
-            if clicking then
-                clicking = false; task_wait(0.02)
-                clicking = true;  task.spawn(spam_loop)
-            end
         end)
     end)
 
@@ -703,7 +555,6 @@ for i = 1, 4 do
     end)
 end
 
--- ─── Mode toggle ──────────────────────────────────────────────────────────
 modeBtn.MouseButton1Click:Connect(function()
     holdMode = not holdMode
     if holdMode then
@@ -711,6 +562,7 @@ modeBtn.MouseButton1Click:Connect(function()
         TweenService:Create(modeStroke, TI_02, {Color = C_AMBER_DIM}):Play()
         if clicking then
             clicking = false
+            accum = 0
             TweenService:Create(statusDot, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
             TweenService:Create(mainStroke,TI_02, {Color = C_DARK_STK}):Play()
             kpsNumber.Text = "0"; last_tier = -1
@@ -721,18 +573,13 @@ modeBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ─── KPS controls ─────────────────────────────────────────────────────────
 local targetKPS = 80
 
 local function updateTarget(newVal)
     targetKPS = m_clamp(newVal, 1, 2000)
-    targetNum.Text   = tostr(targetKPS)
-    kpsTarget.Text   = "TARGET: " .. tostr(targetKPS)
+    targetNum.Text = tostr(targetKPS)
+    kpsTarget.Text = "TARGET: " .. tostr(targetKPS)
     applyKPS(targetKPS)
-    if clicking then
-        clicking = false; task_wait(0.02)
-        clicking = true;  task.spawn(spam_loop)
-    end
 end
 
 local function holdButton(btn, delta)
@@ -741,10 +588,10 @@ local function holdButton(btn, delta)
         held = true
         updateTarget(targetKPS + delta)
         task.spawn(function()
-            task_wait(0.4)
+            task.wait(0.4)
             while held do
                 updateTarget(targetKPS + delta)
-                task_wait(0.06)
+                task.wait(0.06)
             end
         end)
     end)
@@ -770,19 +617,19 @@ for _, pd in ipairs(presetBtns) do
     end)
 end
 
--- ─── Activation ───────────────────────────────────────────────────────────
 local function startClicking()
     if clicking then return end
     clicking  = true
+    accum     = 0
     last_tier = -1
     TweenService:Create(statusDot,  TI_02, {BackgroundColor3 = C_AMBER}):Play()
     TweenService:Create(mainStroke, TI_02, {Color = C_ON_STK}):Play()
-    task.spawn(spam_loop)
 end
 
 local function stopClicking()
     if not clicking then return end
     clicking = false
+    accum    = 0
     TweenService:Create(statusDot,  TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
     TweenService:Create(mainStroke, TI_02, {Color = C_DARK_STK}):Play()
     TweenService:Create(kpsNumber,  TI_03, {TextColor3 = C_AMBER}):Play()
@@ -806,7 +653,6 @@ UIS.InputEnded:Connect(function(input)
     if holdMode then stopClicking() end
 end)
 
--- ─── Drag ─────────────────────────────────────────────────────────────────
 local dragActive  = false
 local dragTarget  = nil
 local dragOffsetX = 0
@@ -858,10 +704,9 @@ UIS.InputEnded:Connect(function(input)
     dragActive = false; dragTarget = nil; tbPending = false
 end)
 
--- ─── Live KPS counter ─────────────────────────────────────────────────────
 task.spawn(function()
     while true do
-        task_wait(0.1)
+        task.wait(0.1)
         if clicking then
             local now    = hrt()
             local cutoff = now - 1
