@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════╗
--- ║           M O K A  v2.0                  ║
+-- ║           M O K A  v2.1                  ║
 -- ║     High-precision macro engine          ║
 -- ╚══════════════════════════════════════════╝
 
@@ -36,7 +36,6 @@ local NANO_GAIN       = 0.05
 local MICRO_GAIN      = 0.15
 local HALF_INTERVAL   = interval * 0.5
 local MAX_LAG         = interval
-local YIELD_THRESHOLD = 0.002
 
 -- ─── Ring buffer for real-time KPS ────────────────────────────────────────
 local RING_SIZE      = 512
@@ -114,6 +113,9 @@ local function fireAllKeys()
     end
 end
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  FPS FIX: eliminado busy-wait loop, reemplazado con task.wait()
+-- ══════════════════════════════════════════════════════════════════════════
 local function spam_loop()
     task_wait(0.05)
     if not clicking then return end
@@ -138,11 +140,12 @@ local function spam_loop()
             + (tick_n_absolute - suppressed_count) * interval
             + phase_offset
 
+        -- FPS FIX: sin busy-wait, cedemos el hilo a Roblox
         local remaining = next_fire - hrt()
-        if remaining > YIELD_THRESHOLD then
-            task_wait(remaining - YIELD_THRESHOLD)
+        if remaining > 0.001 then
+            task_wait(remaining * 0.85)
         end
-        while hrt() < next_fire do end
+        task_wait() -- cede el hilo para que Roblox renderice
 
         if not clicking then break end
 
@@ -216,7 +219,7 @@ local function spam_loop()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════
---  GUI
+--  GUI  (GUI más ancha: 260px → 320px)
 -- ══════════════════════════════════════════════════════════════════════════
 
 local screenGui = Instance.new("ScreenGui")
@@ -225,7 +228,6 @@ screenGui.ResetOnSpawn    = false
 screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
 screenGui.Parent          = playerGui
 
--- ─── Helper: rounded corner ───────────────────────────────────────────────
 local function corner(parent, radius)
     local c = Instance.new("UICorner")
     c.CornerRadius = UDim.new(0, radius or 8)
@@ -255,11 +257,15 @@ local function label(parent, text, size, color, font, xalign)
     return l
 end
 
+-- ─── Dimensiones GUI más ancha ────────────────────────────────────────────
+local FRAME_W = 320
+local FRAME_H = 440
+
 -- ─── Title badge ──────────────────────────────────────────────────────────
 local titleBox = Instance.new("Frame")
 titleBox.Name                = "TitleBox"
-titleBox.Size                = UDim2.new(0, 100, 0, 36)
-titleBox.Position            = UDim2.new(0.5, -50, 0.5, -18)
+titleBox.Size                = UDim2.new(0, 120, 0, 38)
+titleBox.Position            = UDim2.new(0.5, -60, 0.5, -19)
 titleBox.BackgroundColor3    = C_BG2
 titleBox.BorderSizePixel     = 0
 titleBox.BackgroundTransparency = 1
@@ -268,7 +274,7 @@ corner(titleBox, 10)
 
 local titleStroke = stroke(titleBox, C_DARK_STK, 1.5, 1)
 
-local titleLabel = label(titleBox, "MOKA",
+local titleLabel = label(titleBox, "MOKA  v2.1",
     UDim2.new(1, 0, 1, 0), C_AMBER, Enum.Font.GothamBold)
 titleLabel.TextTransparency = 1
 
@@ -279,9 +285,6 @@ titleBtn.Text                = ""
 titleBtn.Parent              = titleBox
 
 -- ─── Main frame ───────────────────────────────────────────────────────────
-local FRAME_W = 190
-local FRAME_H = 420
-
 local frame = Instance.new("Frame")
 frame.Name               = "MainFrame"
 frame.Size               = UDim2.new(0, FRAME_W, 0, FRAME_H)
@@ -295,7 +298,6 @@ corner(frame, 14)
 
 local mainStroke = stroke(frame, C_DARK_STK, 1.5, 1)
 
--- inner glow top bar (amber line)
 local topBar = Instance.new("Frame")
 topBar.Size              = UDim2.new(1, -28, 0, 2)
 topBar.Position          = UDim2.new(0, 14, 0, 0)
@@ -306,13 +308,13 @@ topBar.Parent            = frame
 
 -- ─── Close button ─────────────────────────────────────────────────────────
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size            = UDim2.new(0, 20, 0, 20)
-closeBtn.Position        = UDim2.new(1, -26, 0, 6)
+closeBtn.Size            = UDim2.new(0, 22, 0, 22)
+closeBtn.Position        = UDim2.new(1, -30, 0, 7)
 closeBtn.BackgroundColor3 = C_BG3
 closeBtn.BorderSizePixel = 0
 closeBtn.Text            = "×"
 closeBtn.TextColor3      = C_GREY
-closeBtn.TextSize        = 16
+closeBtn.TextSize        = 17
 closeBtn.Font            = Enum.Font.GothamBold
 closeBtn.ZIndex          = 10
 closeBtn.Parent          = frame
@@ -325,27 +327,27 @@ closeBtn.MouseLeave:Connect(function()
     TweenService:Create(closeBtn, TI_02, {TextColor3 = C_GREY}):Play()
 end)
 
--- ─── Header: logo + status dot ────────────────────────────────────────────
+-- ─── Header ───────────────────────────────────────────────────────────────
 local headerLbl = label(frame, "MOKA",
-    UDim2.new(1, 0, 0, 38), C_AMBER, Enum.Font.GothamBold)
+    UDim2.new(1, 0, 0, 40), C_AMBER, Enum.Font.GothamBold)
 headerLbl.Position = UDim2.new(0, 0, 0, 8)
 
-local subLbl = label(frame, "macro engine",
-    UDim2.new(1, 0, 0, 14), C_AMBER_DIM, Enum.Font.Gotham)
-subLbl.Position = UDim2.new(0, 0, 0, 44)
+local subLbl = label(frame, "macro engine  v2.1",
+    UDim2.new(1, 0, 0, 15), C_AMBER_DIM, Enum.Font.Gotham)
+subLbl.Position = UDim2.new(0, 0, 0, 46)
 
 local statusDot = Instance.new("Frame")
-statusDot.Size            = UDim2.new(0, 8, 0, 8)
-statusDot.Position        = UDim2.new(0.5, -4, 0, 62)
+statusDot.Size            = UDim2.new(0, 9, 0, 9)
+statusDot.Position        = UDim2.new(0.5, -4, 0, 64)
 statusDot.BackgroundColor3 = C_AMBER_LO
 statusDot.BorderSizePixel = 0
 statusDot.Parent          = frame
 corner(statusDot, 10)
 
--- ─── KPS display ──────────────────────────────────────────────────────────
+-- ─── KPS display (más ancho) ──────────────────────────────────────────────
 local kpsBg = Instance.new("Frame")
-kpsBg.Size             = UDim2.new(1, -20, 0, 64)
-kpsBg.Position         = UDim2.new(0, 10, 0, 76)
+kpsBg.Size             = UDim2.new(1, -24, 0, 70)
+kpsBg.Position         = UDim2.new(0, 12, 0, 78)
 kpsBg.BackgroundColor3 = C_BG2
 kpsBg.BorderSizePixel  = 0
 kpsBg.Parent           = frame
@@ -353,24 +355,30 @@ corner(kpsBg, 10)
 stroke(kpsBg, C_DARK_STK, 1)
 
 local kpsNumber = label(kpsBg, "0",
-    UDim2.new(0.6, 0, 1, 0), C_AMBER, Enum.Font.GothamBold)
+    UDim2.new(0.55, 0, 1, 0), C_AMBER, Enum.Font.GothamBold)
 kpsNumber.Position = UDim2.new(0, 0, 0, 0)
 
 local kpsUnit = label(kpsBg, "KPS",
-    UDim2.new(0.4, -8, 0, 18), C_GREY, Enum.Font.Gotham)
-kpsUnit.Position = UDim2.new(0.6, 0, 0, 4)
+    UDim2.new(0.45, -8, 0, 20), C_GREY, Enum.Font.Gotham)
+kpsUnit.Position = UDim2.new(0.55, 0, 0, 6)
 kpsUnit.TextXAlignment = Enum.TextXAlignment.Left
 
 local kpsTarget = label(kpsBg, "TARGET: 80",
-    UDim2.new(0.4, -8, 0, 14), C_AMBER_DIM, Enum.Font.Gotham)
-kpsTarget.Position = UDim2.new(0.6, 0, 0, 24)
+    UDim2.new(0.45, -8, 0, 15), C_AMBER_DIM, Enum.Font.Gotham)
+kpsTarget.Position = UDim2.new(0.55, 0, 0, 28)
 kpsTarget.TextXAlignment = Enum.TextXAlignment.Left
 
--- ─── Divider helper ───────────────────────────────────────────────────────
+-- FPS label (nuevo)
+local fpsLabel = label(kpsBg, "FPS-SAFE MODE",
+    UDim2.new(0.45, -8, 0, 13), Color3.fromRGB(80, 180, 80), Enum.Font.Gotham)
+fpsLabel.Position = UDim2.new(0.55, 0, 0, 46)
+fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- ─── Helpers ──────────────────────────────────────────────────────────────
 local function divider(y)
     local d = Instance.new("Frame")
-    d.Size             = UDim2.new(1, -20, 0, 1)
-    d.Position         = UDim2.new(0, 10, 0, y)
+    d.Size             = UDim2.new(1, -24, 0, 1)
+    d.Position         = UDim2.new(0, 12, 0, y)
     d.BackgroundColor3 = C_BG3
     d.BorderSizePixel  = 0
     d.Parent           = frame
@@ -378,16 +386,15 @@ end
 
 local function rowLabel(text, y)
     local l = label(frame, text,
-        UDim2.new(0.5, -10, 0, 13), C_GREY, Enum.Font.Gotham,
+        UDim2.new(0.5, -10, 0, 14), C_GREY, Enum.Font.Gotham,
         Enum.TextXAlignment.Left)
-    l.Position = UDim2.new(0, 12, 0, y)
+    l.Position = UDim2.new(0, 14, 0, y)
     return l
 end
 
--- ─── Key button factory ───────────────────────────────────────────────────
 local function makeKeyBtn(txt, x, y, w)
     local btn = Instance.new("TextButton")
-    btn.Size              = UDim2.new(0, w or 48, 0, 22)
+    btn.Size              = UDim2.new(0, w or 54, 0, 24)
     btn.Position          = UDim2.new(0, x, 0, y)
     btn.BackgroundColor3  = C_BG3
     btn.BorderSizePixel   = 0
@@ -401,30 +408,13 @@ local function makeKeyBtn(txt, x, y, w)
     return btn, s
 end
 
--- ─── Toggle button factory ────────────────────────────────────────────────
-local function makeToggle(txt, x, y, w, h)
-    local btn = Instance.new("TextButton")
-    btn.Size             = UDim2.new(0, w or 32, 0, h or 20)
-    btn.Position         = UDim2.new(0, x, 0, y)
-    btn.BackgroundColor3 = C_BG3
-    btn.BorderSizePixel  = 0
-    btn.Text             = txt
-    btn.TextColor3       = C_GREY
-    btn.TextScaled       = true
-    btn.Font             = Enum.Font.GothamBold
-    btn.Parent           = frame
-    corner(btn, 5)
-    local s = stroke(btn, C_DARK_STK, 1)
-    return btn, s
-end
-
 -- ─── KPS row ──────────────────────────────────────────────────────────────
-divider(148)
-rowLabel("KPS TARGET:", 155)
+divider(158)
+rowLabel("KPS TARGET:", 166)
 
 local btnMinus = Instance.new("TextButton")
-btnMinus.Size             = UDim2.new(0, 36, 0, 26)
-btnMinus.Position         = UDim2.new(0, 10, 0, 170)
+btnMinus.Size             = UDim2.new(0, 44, 0, 28)
+btnMinus.Position         = UDim2.new(0, 12, 0, 182)
 btnMinus.BackgroundColor3 = C_BG3
 btnMinus.BorderSizePixel  = 0
 btnMinus.Text             = "–"
@@ -435,12 +425,12 @@ btnMinus.Parent           = frame
 corner(btnMinus, 7)
 
 local targetNum = label(frame, "80",
-    UDim2.new(0, 74, 0, 26), C_AMBER, Enum.Font.GothamBold)
-targetNum.Position = UDim2.new(0.5, -37, 0, 170)
+    UDim2.new(0, 90, 0, 28), C_AMBER, Enum.Font.GothamBold)
+targetNum.Position = UDim2.new(0.5, -45, 0, 182)
 
 local btnPlus = Instance.new("TextButton")
-btnPlus.Size             = UDim2.new(0, 36, 0, 26)
-btnPlus.Position         = UDim2.new(1, -46, 0, 170)
+btnPlus.Size             = UDim2.new(0, 44, 0, 28)
+btnPlus.Position         = UDim2.new(1, -56, 0, 182)
 btnPlus.BackgroundColor3 = C_BG3
 btnPlus.BorderSizePixel  = 0
 btnPlus.Text             = "+"
@@ -450,24 +440,24 @@ btnPlus.Font             = Enum.Font.GothamBold
 btnPlus.Parent           = frame
 corner(btnPlus, 7)
 
--- quick presets
+-- Presets (más espacio con GUI ancha)
 local presetRow = Instance.new("Frame")
-presetRow.Size             = UDim2.new(1, -20, 0, 18)
-presetRow.Position         = UDim2.new(0, 10, 0, 202)
+presetRow.Size             = UDim2.new(1, -24, 0, 20)
+presetRow.Position         = UDim2.new(0, 12, 0, 216)
 presetRow.BackgroundTransparency = 1
 presetRow.Parent           = frame
 
 local presetList = Instance.new("UIListLayout")
 presetList.FillDirection   = Enum.FillDirection.Horizontal
 presetList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-presetList.Padding         = UDim.new(0, 4)
+presetList.Padding         = UDim.new(0, 6)
 presetList.Parent          = presetRow
 
 local presets = {20, 80, 200, 500, 2000}
 local presetBtns = {}
 for _, v in ipairs(presets) do
     local pb = Instance.new("TextButton")
-    pb.Size             = UDim2.new(0, 30, 1, 0)
+    pb.Size             = UDim2.new(0, 46, 1, 0)
     pb.BackgroundColor3 = C_BG3
     pb.BorderSizePixel  = 0
     pb.Text             = tostr(v)
@@ -481,12 +471,12 @@ for _, v in ipairs(presets) do
 end
 
 -- ─── Mode row ─────────────────────────────────────────────────────────────
-divider(228)
-rowLabel("MODE:", 236)
+divider(244)
+rowLabel("MODE:", 252)
 
 local modeBtn = Instance.new("TextButton")
-modeBtn.Size             = UDim2.new(0, 80, 0, 20)
-modeBtn.Position         = UDim2.new(1, -90, 0, 234)
+modeBtn.Size             = UDim2.new(0, 100, 0, 22)
+modeBtn.Position         = UDim2.new(1, -112, 0, 250)
 modeBtn.BackgroundColor3 = C_BG3
 modeBtn.BorderSizePixel  = 0
 modeBtn.Text             = "TOGGLE"
@@ -498,34 +488,33 @@ corner(modeBtn, 6)
 local modeStroke = stroke(modeBtn, C_DARK_STK, 1)
 
 -- ─── ACTIVATE row ─────────────────────────────────────────────────────────
-divider(262)
-rowLabel("ACTIVATE:", 270)
-local activateBtn, activateStroke = makeKeyBtn("E", FRAME_W - 60, 267)
+divider(280)
+rowLabel("ACTIVATE KEY:", 288)
+local activateBtn, activateStroke = makeKeyBtn("E", FRAME_W - 74, 285)
 
--- ─── 4 Spam Keys ──────────────────────────────────────────────────────────
-divider(298)
-rowLabel("SPAM KEYS:", 306)
+-- ─── 4 Spam Keys (grid 2x2 más ancho) ────────────────────────────────────
+divider(318)
+rowLabel("SPAM KEYS:", 326)
 
--- We'll lay them out in a 2x2 grid
 local keyGrid = Instance.new("Frame")
-keyGrid.Size             = UDim2.new(1, -20, 0, 56)
-keyGrid.Position         = UDim2.new(0, 10, 0, 322)
+keyGrid.Size             = UDim2.new(1, -24, 0, 62)
+keyGrid.Position         = UDim2.new(0, 12, 0, 344)
 keyGrid.BackgroundTransparency = 1
 keyGrid.Parent           = frame
 
 local keyLayout = Instance.new("UIGridLayout")
-keyLayout.CellSize       = UDim2.new(0.5, -3, 0, 24)
-keyLayout.CellPadding    = UDim2.new(0, 4, 0, 4)
+keyLayout.CellSize       = UDim2.new(0.5, -4, 0, 26)
+keyLayout.CellPadding    = UDim2.new(0, 6, 0, 6)
 keyLayout.Parent         = keyGrid
 
 local spamBtnDefs = {
-    {label="KEY1: F",  key=SPAM_KEY1, idx=1},
-    {label="KEY2: —",  key=SPAM_KEY2, idx=2},
-    {label="KEY3: —",  key=SPAM_KEY3, idx=3},
-    {label="KEY4: —",  key=SPAM_KEY4, idx=4},
+    {label="KEY 1: F",  key=SPAM_KEY1, idx=1},
+    {label="KEY 2: —",  key=SPAM_KEY2, idx=2},
+    {label="KEY 3: —",  key=SPAM_KEY3, idx=3},
+    {label="KEY 4: —",  key=SPAM_KEY4, idx=4},
 }
 
-local spamBtns   = {}
+local spamBtns    = {}
 local spamStrokes = {}
 
 for i, def in ipairs(spamBtnDefs) do
@@ -540,7 +529,7 @@ for i, def in ipairs(spamBtnDefs) do
     btn.Parent           = keyGrid
     corner(btn, 6)
     local s = stroke(btn, i == 1 and C_AMBER_DIM or C_DARK_STK, 1)
-    spamBtns[i]   = btn
+    spamBtns[i]    = btn
     spamStrokes[i] = s
 end
 
@@ -608,7 +597,7 @@ closeBtn.MouseButton1Click:Connect(function()
     closeMainGui()
 end)
 
--- ─── Startup ──────────────────────────────────────────────────────────────
+-- ─── Startup animation ────────────────────────────────────────────────────
 task.spawn(function()
     task_wait(0.3)
     titleBox.Visible = true
@@ -631,7 +620,7 @@ local function bindKey(btn, btnStroke, blockedKeys, onSuccess)
     if waitingForKey then return end
     waitingForKey = true
     local prev = btn.Text
-    btn.Text      = "..."
+    btn.Text       = "..."
     btn.TextColor3 = C_GREY
     TweenService:Create(btnStroke, TI_02, {Color = C_GREY}):Play()
 
@@ -642,7 +631,7 @@ local function bindKey(btn, btnStroke, blockedKeys, onSuccess)
             if input.KeyCode == blocked then
                 btn.Text = "!"
                 task.delay(0.8, function()
-                    btn.Text      = prev
+                    btn.Text       = prev
                     btn.TextColor3 = C_WHITE
                     TweenService:Create(btnStroke, TI_02, {Color = C_DARK_STK}):Play()
                     waitingForKey = false
@@ -651,8 +640,8 @@ local function bindKey(btn, btnStroke, blockedKeys, onSuccess)
             end
         end
         local name = tostr(input.KeyCode.Name)
-        if #name > 5 then name = string.sub(name, 1, 5) end
-        btn.Text      = name
+        if #name > 6 then name = string.sub(name, 1, 6) end
+        btn.Text       = name
         btn.TextColor3 = C_WHITE
         TweenService:Create(btnStroke, TI_02, {Color = C_DARK_STK}):Play()
         waitingForKey = false
@@ -673,7 +662,6 @@ activateBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
--- Spam key buttons
 for i = 1, 4 do
     local btn = spamBtns[i]
     local s   = spamStrokes[i]
@@ -686,18 +674,13 @@ for i = 1, 4 do
             end
         end
 
-        -- right-click / second click behavior: toggle off if already set
-        if spam_keys_enabled[i] and i > 1 then
-            -- toggle disable on right-click (handled separately below)
-        end
-
         bindKey(btn, s, blocked, function(key)
             spam_keys[i] = key
             spam_keys_enabled[i] = true
 
             local name = tostr(key.Name)
-            if #name > 5 then name = string.sub(name, 1, 5) end
-            btn.Text      = "K" .. i .. ": " .. name
+            if #name > 6 then name = string.sub(name, 1, 6) end
+            btn.Text       = "K" .. i .. ": " .. name
             btn.TextColor3 = C_AMBER
             TweenService:Create(btn, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
             TweenService:Create(s,   TI_02, {Color = C_AMBER_DIM}):Play()
@@ -709,9 +692,8 @@ for i = 1, 4 do
         end)
     end)
 
-    -- Right-click to disable a key slot
     btn.MouseButton2Click:Connect(function()
-        if i == 1 then return end -- can't disable key1
+        if i == 1 then return end
         spam_keys[i]         = Enum.KeyCode.Unknown
         spam_keys_enabled[i] = false
         btn.Text       = "K" .. i .. ": —"
@@ -773,11 +755,9 @@ end
 holdButton(btnMinus, -1)
 holdButton(btnPlus,   1)
 
--- Shift+click for ±10
 btnMinus.MouseButton2Click:Connect(function() updateTarget(targetKPS - 10) end)
 btnPlus.MouseButton2Click:Connect(function()  updateTarget(targetKPS + 10) end)
 
--- Preset buttons
 for _, pd in ipairs(presetBtns) do
     pd.btn.MouseButton1Click:Connect(function()
         updateTarget(pd.val)
