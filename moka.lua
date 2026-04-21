@@ -7,6 +7,7 @@ local clicking  = false
 local holdMode  = false
 local KPS       = 80
 local interval  = 1 / KPS
+local accum     = 0
 
 local RING_SIZE      = 512
 local ring           = table.create(RING_SIZE, 0)
@@ -15,13 +16,13 @@ local last_tier      = -1
 local last_count_str = "0"
 
 local TOGGLE_KEY = Enum.KeyCode.E
-local SPAM_KEY1  = Enum.KeyCode.F
-local SPAM_KEY2  = Enum.KeyCode.Unknown
-local SPAM_KEY3  = Enum.KeyCode.Unknown
-local SPAM_KEY4  = Enum.KeyCode.Unknown
-
 local spam_keys_enabled = {true, false, false, false}
-local spam_keys         = {SPAM_KEY1, SPAM_KEY2, SPAM_KEY3, SPAM_KEY4}
+local spam_keys = {
+    Enum.KeyCode.F,
+    Enum.KeyCode.Unknown,
+    Enum.KeyCode.Unknown,
+    Enum.KeyCode.Unknown,
+}
 
 local UIS          = game:GetService("UserInputService")
 local VIM          = game:GetService("VirtualInputManager")
@@ -31,11 +32,10 @@ local Players      = game:GetService("Players")
 local player       = Players.LocalPlayer
 local playerGui    = player:WaitForChild("PlayerGui")
 
-local hrt       = os.clock
-local m_floor   = math.floor
-local m_abs     = math.abs
-local m_clamp   = math.clamp
-local tostr     = tostring
+local hrt     = os.clock
+local m_floor = math.floor
+local m_clamp = math.clamp
+local tostr   = tostring
 
 local C_BG        = Color3.fromRGB(10,  8,   6)
 local C_BG2       = Color3.fromRGB(18,  14,  10)
@@ -51,9 +51,9 @@ local C_ON_STK    = Color3.fromRGB(255, 165, 50)
 local TI_02  = TweenInfo.new(0.2)
 local TI_03  = TweenInfo.new(0.3)
 local TI_015 = TweenInfo.new(0.15)
-local TI_04  = TweenInfo.new(0.4, Enum.EasingStyle.Quad,  Enum.EasingDirection.Out)
-local TI_05  = TweenInfo.new(0.5, Enum.EasingStyle.Quad,  Enum.EasingDirection.Out)
-local TI_06  = TweenInfo.new(0.6, Enum.EasingStyle.Back,  Enum.EasingDirection.Out)
+local TI_04  = TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TI_05  = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local TI_06  = TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
 local function applyKPS(newKPS)
     KPS      = m_clamp(newKPS, 1, 2000)
@@ -70,24 +70,21 @@ local function fireAllKeys()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════
---  IDLE LOOP — corre siempre, dispara solo cuando clicking = true
+--  IDLE LOOP — siempre activo, dispara solo cuando clicking = true
 -- ══════════════════════════════════════════════════════════════════════════
-local accum = 0
-
 RunService.Heartbeat:Connect(function(dt)
     if not clicking then
         accum = 0
         return
     end
-
     accum = accum + dt
     local shots = m_floor(accum / interval)
+    if shots <= 0 then return end
     accum = accum - shots * interval
-
     local now = hrt()
     for _ = 1, shots do
         fireAllKeys()
-        ring_head       = (ring_head % RING_SIZE) + 1
+        ring_head = (ring_head % RING_SIZE) + 1
         ring[ring_head] = now
     end
 end)
@@ -99,10 +96,10 @@ local FRAME_W = 320
 local FRAME_H = 440
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name            = "MokaGUI"
-screenGui.ResetOnSpawn    = false
-screenGui.ZIndexBehavior  = Enum.ZIndexBehavior.Sibling
-screenGui.Parent          = playerGui
+screenGui.Name           = "MokaGUI"
+screenGui.ResetOnSpawn   = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent         = playerGui
 
 local function corner(parent, radius)
     local c = Instance.new("UICorner")
@@ -111,62 +108,52 @@ local function corner(parent, radius)
     return c
 end
 
-local function stroke(parent, color, thick, trans)
-    local s = Instance.new("UIStroke")
-    s.Color        = color or C_DARK_STK
-    s.Thickness    = thick or 1.2
-    s.Transparency = trans or 0
-    s.Parent       = parent
-    return s
-end
-
+-- Sin UIStroke para mejor rendimiento
 local function label(parent, text, size, color, font, xalign)
     local l = Instance.new("TextLabel")
     l.BackgroundTransparency = 1
-    l.Size        = size
-    l.Text        = text
-    l.TextColor3  = color or C_WHITE
-    l.TextScaled  = true
-    l.Font        = font or Enum.Font.GothamBold
+    l.Size           = size
+    l.Text           = text
+    l.TextColor3     = color or C_WHITE
+    l.TextScaled     = true
+    l.Font           = font or Enum.Font.GothamBold
     l.TextXAlignment = xalign or Enum.TextXAlignment.Center
-    l.Parent      = parent
+    l.Parent         = parent
     return l
 end
 
+-- Title badge
 local titleBox = Instance.new("Frame")
-titleBox.Name                = "TitleBox"
-titleBox.Size                = UDim2.new(0, 120, 0, 38)
-titleBox.Position            = UDim2.new(0.5, -60, 0.5, -19)
-titleBox.BackgroundColor3    = C_BG2
-titleBox.BorderSizePixel     = 0
+titleBox.Name                   = "TitleBox"
+titleBox.Size                   = UDim2.new(0, 120, 0, 38)
+titleBox.Position               = UDim2.new(0.5, -60, 0.5, -19)
+titleBox.BackgroundColor3       = C_BG2
+titleBox.BorderSizePixel        = 0
 titleBox.BackgroundTransparency = 1
-titleBox.Parent              = screenGui
+titleBox.Parent                 = screenGui
 corner(titleBox, 10)
-
-local titleStroke = stroke(titleBox, C_DARK_STK, 1.5, 1)
 
 local titleLabel = label(titleBox, "MOKA  v2.1",
     UDim2.new(1, 0, 1, 0), C_AMBER, Enum.Font.GothamBold)
 titleLabel.TextTransparency = 1
 
 local titleBtn = Instance.new("TextButton")
-titleBtn.Size                = UDim2.new(1, 0, 1, 0)
+titleBtn.Size               = UDim2.new(1, 0, 1, 0)
 titleBtn.BackgroundTransparency = 1
-titleBtn.Text                = ""
-titleBtn.Parent              = titleBox
+titleBtn.Text               = ""
+titleBtn.Parent             = titleBox
 
+-- Main frame
 local frame = Instance.new("Frame")
-frame.Name               = "MainFrame"
-frame.Size               = UDim2.new(0, FRAME_W, 0, FRAME_H)
-frame.Position           = UDim2.new(0.5, -FRAME_W/2, 0.5, -FRAME_H/2)
-frame.BackgroundColor3   = C_BG
-frame.BorderSizePixel    = 0
+frame.Name                   = "MainFrame"
+frame.Size                   = UDim2.new(0, FRAME_W, 0, FRAME_H)
+frame.Position               = UDim2.new(0.5, -FRAME_W/2, 0.5, -FRAME_H/2)
+frame.BackgroundColor3       = C_BG
+frame.BorderSizePixel        = 0
 frame.BackgroundTransparency = 1
-frame.Visible            = false
-frame.Parent             = screenGui
+frame.Visible                = false
+frame.Parent                 = screenGui
 corner(frame, 14)
-
-local mainStroke = stroke(frame, C_DARK_STK, 1.5, 1)
 
 local topBar = Instance.new("Frame")
 topBar.Size              = UDim2.new(1, -28, 0, 2)
@@ -176,17 +163,18 @@ topBar.BorderSizePixel   = 0
 topBar.BackgroundTransparency = 0.3
 topBar.Parent            = frame
 
+-- Close button
 local closeBtn = Instance.new("TextButton")
-closeBtn.Size            = UDim2.new(0, 22, 0, 22)
-closeBtn.Position        = UDim2.new(1, -30, 0, 7)
+closeBtn.Size             = UDim2.new(0, 22, 0, 22)
+closeBtn.Position         = UDim2.new(1, -30, 0, 7)
 closeBtn.BackgroundColor3 = C_BG3
-closeBtn.BorderSizePixel = 0
-closeBtn.Text            = "×"
-closeBtn.TextColor3      = C_GREY
-closeBtn.TextSize        = 17
-closeBtn.Font            = Enum.Font.GothamBold
-closeBtn.ZIndex          = 10
-closeBtn.Parent          = frame
+closeBtn.BorderSizePixel  = 0
+closeBtn.Text             = "×"
+closeBtn.TextColor3       = C_GREY
+closeBtn.TextSize         = 17
+closeBtn.Font             = Enum.Font.GothamBold
+closeBtn.ZIndex           = 10
+closeBtn.Parent           = frame
 corner(closeBtn, 5)
 
 closeBtn.MouseEnter:Connect(function()
@@ -196,6 +184,7 @@ closeBtn.MouseLeave:Connect(function()
     TweenService:Create(closeBtn, TI_02, {TextColor3 = C_GREY}):Play()
 end)
 
+-- Header
 local headerLbl = label(frame, "MOKA",
     UDim2.new(1, 0, 0, 40), C_AMBER, Enum.Font.GothamBold)
 headerLbl.Position = UDim2.new(0, 0, 0, 8)
@@ -205,13 +194,14 @@ local subLbl = label(frame, "macro engine  v2.1",
 subLbl.Position = UDim2.new(0, 0, 0, 46)
 
 local statusDot = Instance.new("Frame")
-statusDot.Size            = UDim2.new(0, 9, 0, 9)
-statusDot.Position        = UDim2.new(0.5, -4, 0, 64)
+statusDot.Size             = UDim2.new(0, 9, 0, 9)
+statusDot.Position         = UDim2.new(0.5, -4, 0, 64)
 statusDot.BackgroundColor3 = C_AMBER_LO
-statusDot.BorderSizePixel = 0
-statusDot.Parent          = frame
+statusDot.BorderSizePixel  = 0
+statusDot.Parent           = frame
 corner(statusDot, 10)
 
+-- KPS display
 local kpsBg = Instance.new("Frame")
 kpsBg.Size             = UDim2.new(1, -24, 0, 70)
 kpsBg.Position         = UDim2.new(0, 12, 0, 78)
@@ -219,7 +209,6 @@ kpsBg.BackgroundColor3 = C_BG2
 kpsBg.BorderSizePixel  = 0
 kpsBg.Parent           = frame
 corner(kpsBg, 10)
-stroke(kpsBg, C_DARK_STK, 1)
 
 local kpsNumber = label(kpsBg, "0",
     UDim2.new(0.55, 0, 1, 0), C_AMBER, Enum.Font.GothamBold)
@@ -227,17 +216,17 @@ kpsNumber.Position = UDim2.new(0, 0, 0, 0)
 
 local kpsUnit = label(kpsBg, "KPS",
     UDim2.new(0.45, -8, 0, 20), C_GREY, Enum.Font.Gotham)
-kpsUnit.Position = UDim2.new(0.55, 0, 0, 6)
+kpsUnit.Position       = UDim2.new(0.55, 0, 0, 6)
 kpsUnit.TextXAlignment = Enum.TextXAlignment.Left
 
 local kpsTarget = label(kpsBg, "TARGET: 80",
     UDim2.new(0.45, -8, 0, 15), C_AMBER_DIM, Enum.Font.Gotham)
-kpsTarget.Position = UDim2.new(0.55, 0, 0, 28)
+kpsTarget.Position       = UDim2.new(0.55, 0, 0, 28)
 kpsTarget.TextXAlignment = Enum.TextXAlignment.Left
 
 local fpsLabel = label(kpsBg, "INSTANT START",
     UDim2.new(0.45, -8, 0, 13), Color3.fromRGB(80, 180, 80), Enum.Font.Gotham)
-fpsLabel.Position = UDim2.new(0.55, 0, 0, 46)
+fpsLabel.Position       = UDim2.new(0.55, 0, 0, 46)
 fpsLabel.TextXAlignment = Enum.TextXAlignment.Left
 
 local function divider(y)
@@ -257,22 +246,7 @@ local function rowLabel(text, y)
     return l
 end
 
-local function makeKeyBtn(txt, x, y, w)
-    local btn = Instance.new("TextButton")
-    btn.Size              = UDim2.new(0, w or 54, 0, 24)
-    btn.Position          = UDim2.new(0, x, 0, y)
-    btn.BackgroundColor3  = C_BG3
-    btn.BorderSizePixel   = 0
-    btn.Text              = txt
-    btn.TextColor3        = C_WHITE
-    btn.TextScaled        = true
-    btn.Font              = Enum.Font.GothamBold
-    btn.Parent            = frame
-    corner(btn, 6)
-    local s = stroke(btn, C_DARK_STK, 1)
-    return btn, s
-end
-
+-- KPS row
 divider(158)
 rowLabel("KPS TARGET:", 166)
 
@@ -305,18 +279,18 @@ btnPlus.Parent           = frame
 corner(btnPlus, 7)
 
 local presetRow = Instance.new("Frame")
-presetRow.Size             = UDim2.new(1, -24, 0, 20)
-presetRow.Position         = UDim2.new(0, 12, 0, 216)
+presetRow.Size                   = UDim2.new(1, -24, 0, 20)
+presetRow.Position               = UDim2.new(0, 12, 0, 216)
 presetRow.BackgroundTransparency = 1
-presetRow.Parent           = frame
+presetRow.Parent                 = frame
 
 local presetList = Instance.new("UIListLayout")
-presetList.FillDirection   = Enum.FillDirection.Horizontal
-presetList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-presetList.Padding         = UDim.new(0, 6)
-presetList.Parent          = presetRow
+presetList.FillDirection        = Enum.FillDirection.Horizontal
+presetList.HorizontalAlignment  = Enum.HorizontalAlignment.Center
+presetList.Padding              = UDim.new(0, 6)
+presetList.Parent               = presetRow
 
-local presets = {20, 80, 200, 500, 2000}
+local presets    = {20, 80, 200, 500, 2000}
 local presetBtns = {}
 for _, v in ipairs(presets) do
     local pb = Instance.new("TextButton")
@@ -329,10 +303,10 @@ for _, v in ipairs(presets) do
     pb.Font             = Enum.Font.Gotham
     pb.Parent           = presetRow
     corner(pb, 4)
-    stroke(pb, C_DARK_STK, 1)
-    table.insert(presetBtns, {btn=pb, val=v})
+    table.insert(presetBtns, {btn = pb, val = v})
 end
 
+-- Mode row
 divider(244)
 rowLabel("MODE:", 252)
 
@@ -347,36 +321,46 @@ modeBtn.TextScaled       = true
 modeBtn.Font             = Enum.Font.GothamBold
 modeBtn.Parent           = frame
 corner(modeBtn, 6)
-local modeStroke = stroke(modeBtn, C_DARK_STK, 1)
 
+-- Activate key row
 divider(280)
 rowLabel("ACTIVATE KEY:", 288)
-local activateBtn, activateStroke = makeKeyBtn("E", FRAME_W - 74, 285)
 
+local activateBtn = Instance.new("TextButton")
+activateBtn.Size             = UDim2.new(0, 54, 0, 24)
+activateBtn.Position         = UDim2.new(1, -66, 0, 285)
+activateBtn.BackgroundColor3 = C_BG3
+activateBtn.BorderSizePixel  = 0
+activateBtn.Text             = "E"
+activateBtn.TextColor3       = C_WHITE
+activateBtn.TextScaled       = true
+activateBtn.Font             = Enum.Font.GothamBold
+activateBtn.Parent           = frame
+corner(activateBtn, 6)
+
+-- Spam keys grid
 divider(318)
 rowLabel("SPAM KEYS:", 326)
 
 local keyGrid = Instance.new("Frame")
-keyGrid.Size             = UDim2.new(1, -24, 0, 62)
-keyGrid.Position         = UDim2.new(0, 12, 0, 344)
+keyGrid.Size                   = UDim2.new(1, -24, 0, 62)
+keyGrid.Position               = UDim2.new(0, 12, 0, 344)
 keyGrid.BackgroundTransparency = 1
-keyGrid.Parent           = frame
+keyGrid.Parent                 = frame
 
 local keyLayout = Instance.new("UIGridLayout")
-keyLayout.CellSize       = UDim2.new(0.5, -4, 0, 26)
-keyLayout.CellPadding    = UDim2.new(0, 6, 0, 6)
-keyLayout.Parent         = keyGrid
+keyLayout.CellSize    = UDim2.new(0.5, -4, 0, 26)
+keyLayout.CellPadding = UDim2.new(0, 6, 0, 6)
+keyLayout.Parent      = keyGrid
 
 local spamBtnDefs = {
-    {label="KEY 1: F",  key=SPAM_KEY1, idx=1},
-    {label="KEY 2: —",  key=SPAM_KEY2, idx=2},
-    {label="KEY 3: —",  key=SPAM_KEY3, idx=3},
-    {label="KEY 4: —",  key=SPAM_KEY4, idx=4},
+    {label = "KEY 1: F", idx = 1},
+    {label = "KEY 2: —", idx = 2},
+    {label = "KEY 3: —", idx = 3},
+    {label = "KEY 4: —", idx = 4},
 }
 
-local spamBtns    = {}
-local spamStrokes = {}
-
+local spamBtns = {}
 for i, def in ipairs(spamBtnDefs) do
     local btn = Instance.new("TextButton")
     btn.Size             = UDim2.new(1, 0, 1, 0)
@@ -388,28 +372,27 @@ for i, def in ipairs(spamBtnDefs) do
     btn.Font             = Enum.Font.GothamBold
     btn.Parent           = keyGrid
     corner(btn, 6)
-    local s = stroke(btn, i == 1 and C_AMBER_DIM or C_DARK_STK, 1)
-    spamBtns[i]    = btn
-    spamStrokes[i] = s
+    spamBtns[i] = btn
 end
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  OPEN / CLOSE GUI
+-- ══════════════════════════════════════════════════════════════════════════
 local mainOpen = false
 
 local function openMainGui()
     if mainOpen then return end
     mainOpen = true
     local tbPos = titleBox.AbsolutePosition
-    TweenService:Create(titleBox,    TI_04, {BackgroundTransparency = 1}):Play()
-    TweenService:Create(titleStroke, TI_04, {Transparency = 1}):Play()
-    TweenService:Create(titleLabel,  TI_04, {TextTransparency = 1}):Play()
+    TweenService:Create(titleBox,   TI_04, {BackgroundTransparency = 1}):Play()
+    TweenService:Create(titleLabel, TI_04, {TextTransparency = 1}):Play()
     task.delay(0.25, function()
         titleBox.Visible = false
         frame.Position   = UDim2.new(0, tbPos.X, 0, tbPos.Y)
         frame.Size       = UDim2.new(0, FRAME_W, 0, 36)
         frame.BackgroundTransparency = 0
         frame.Visible    = true
-        TweenService:Create(frame,       TI_06, {Size = UDim2.new(0, FRAME_W, 0, FRAME_H)}):Play()
-        TweenService:Create(mainStroke,  TI_05, {Transparency = 0}):Play()
+        TweenService:Create(frame, TI_06, {Size = UDim2.new(0, FRAME_W, 0, FRAME_H)}):Play()
     end)
 end
 
@@ -417,28 +400,30 @@ local function closeMainGui()
     if not mainOpen then return end
     mainOpen = false
     local fPos = frame.AbsolutePosition
-    TweenService:Create(frame,      TI_04, {Size = UDim2.new(0, FRAME_W, 0, 36), BackgroundTransparency = 1}):Play()
-    TweenService:Create(mainStroke, TI_04, {Transparency = 1}):Play()
+    TweenService:Create(frame, TI_04, {
+        Size = UDim2.new(0, FRAME_W, 0, 36),
+        BackgroundTransparency = 1
+    }):Play()
     task.delay(0.35, function()
-        frame.Visible = false
-        frame.Size    = UDim2.new(0, FRAME_W, 0, FRAME_H)
+        frame.Visible     = false
+        frame.Size        = UDim2.new(0, FRAME_W, 0, FRAME_H)
         titleBox.Position = UDim2.new(0, fPos.X, 0, fPos.Y)
         titleBox.Visible  = true
-        TweenService:Create(titleBox,    TI_05, {BackgroundTransparency = 0}):Play()
-        TweenService:Create(titleStroke, TI_05, {Transparency = 0}):Play()
-        TweenService:Create(titleLabel,  TI_05, {TextTransparency = 0}):Play()
+        TweenService:Create(titleBox,   TI_05, {BackgroundTransparency = 0}):Play()
+        TweenService:Create(titleLabel, TI_05, {TextTransparency = 0}):Play()
     end)
 end
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  TITLE BADGE
+-- ══════════════════════════════════════════════════════════════════════════
 local tbDidDrag = false
 
 titleBtn.MouseEnter:Connect(function()
-    TweenService:Create(titleStroke, TI_02, {Color = C_ON_STK}):Play()
-    TweenService:Create(titleLabel,  TI_02, {TextColor3 = C_WHITE}):Play()
+    TweenService:Create(titleLabel, TI_02, {TextColor3 = C_WHITE}):Play()
 end)
 titleBtn.MouseLeave:Connect(function()
-    TweenService:Create(titleStroke, TI_02, {Color = C_DARK_STK}):Play()
-    TweenService:Create(titleLabel,  TI_02, {TextColor3 = C_AMBER}):Play()
+    TweenService:Create(titleLabel, TI_02, {TextColor3 = C_AMBER}):Play()
 end)
 titleBtn.MouseButton1Click:Connect(function()
     if not tbDidDrag then openMainGui() end
@@ -447,39 +432,36 @@ end)
 closeBtn.MouseButton1Click:Connect(function()
     if clicking then
         clicking = false
-        accum = 0
-        TweenService:Create(statusDot, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
-        TweenService:Create(mainStroke,TI_02, {Color = C_DARK_STK}):Play()
+        accum    = 0
+        statusDot.BackgroundColor3 = C_AMBER_LO
         kpsNumber.Text = "0"
         last_tier = -1
     end
     closeMainGui()
 end)
 
+-- Startup animation
 task.spawn(function()
     task.wait(0.3)
     titleBox.Visible = true
-    TweenService:Create(titleBox,    TI_05, {BackgroundTransparency = 0}):Play()
-    TweenService:Create(titleStroke, TI_05, {Transparency = 0}):Play()
+    TweenService:Create(titleBox,   TI_05, {BackgroundTransparency = 0}):Play()
     task.wait(0.1)
     TweenService:Create(titleLabel,
         TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
         {TextTransparency = 0}):Play()
-    task.wait(0.7)
-    TweenService:Create(titleStroke, TI_03, {Color = C_ON_STK}):Play()
-    task.wait(0.4)
-    TweenService:Create(titleStroke, TI_03, {Color = C_DARK_STK}):Play()
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  KEY BIND
+-- ══════════════════════════════════════════════════════════════════════════
 local waitingForKey = false
 
-local function bindKey(btn, btnStroke, blockedKeys, onSuccess)
+local function bindKey(btn, blockedKeys, onSuccess)
     if waitingForKey then return end
-    waitingForKey = true
-    local prev = btn.Text
+    waitingForKey  = true
+    local prev     = btn.Text
     btn.Text       = "..."
     btn.TextColor3 = C_GREY
-    TweenService:Create(btnStroke, TI_02, {Color = C_GREY}):Play()
 
     local conn
     conn = UIS.InputBegan:Connect(function(input)
@@ -490,8 +472,7 @@ local function bindKey(btn, btnStroke, blockedKeys, onSuccess)
                 task.delay(0.8, function()
                     btn.Text       = prev
                     btn.TextColor3 = C_WHITE
-                    TweenService:Create(btnStroke, TI_02, {Color = C_DARK_STK}):Play()
-                    waitingForKey = false
+                    waitingForKey  = false
                 end)
                 conn:Disconnect(); return
             end
@@ -500,8 +481,7 @@ local function bindKey(btn, btnStroke, blockedKeys, onSuccess)
         if #name > 6 then name = string.sub(name, 1, 6) end
         btn.Text       = name
         btn.TextColor3 = C_WHITE
-        TweenService:Create(btnStroke, TI_02, {Color = C_DARK_STK}):Play()
-        waitingForKey = false
+        waitingForKey  = false
         onSuccess(input.KeyCode)
         conn:Disconnect()
     end)
@@ -514,15 +494,13 @@ activateBtn.MouseButton1Click:Connect(function()
             table.insert(blocked, spam_keys[i])
         end
     end
-    bindKey(activateBtn, activateStroke, blocked, function(key)
+    bindKey(activateBtn, blocked, function(key)
         TOGGLE_KEY = key
     end)
 end)
 
 for i = 1, 4 do
     local btn = spamBtns[i]
-    local s   = spamStrokes[i]
-
     btn.MouseButton1Click:Connect(function()
         local blocked = {TOGGLE_KEY}
         for j = 1, 4 do
@@ -530,17 +508,14 @@ for i = 1, 4 do
                 table.insert(blocked, spam_keys[j])
             end
         end
-
-        bindKey(btn, s, blocked, function(key)
-            spam_keys[i] = key
+        bindKey(btn, blocked, function(key)
+            spam_keys[i]         = key
             spam_keys_enabled[i] = true
-
             local name = tostr(key.Name)
             if #name > 6 then name = string.sub(name, 1, 6) end
-            btn.Text       = "K" .. i .. ": " .. name
-            btn.TextColor3 = C_AMBER
+            btn.Text             = "K" .. i .. ": " .. name
+            btn.TextColor3       = C_AMBER
             TweenService:Create(btn, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
-            TweenService:Create(s,   TI_02, {Color = C_AMBER_DIM}):Play()
         end)
     end)
 
@@ -548,35 +523,38 @@ for i = 1, 4 do
         if i == 1 then return end
         spam_keys[i]         = Enum.KeyCode.Unknown
         spam_keys_enabled[i] = false
-        btn.Text       = "K" .. i .. ": —"
-        btn.TextColor3 = C_GREY
+        btn.Text             = "K" .. i .. ": —"
+        btn.TextColor3       = C_GREY
         TweenService:Create(btn, TI_02, {BackgroundColor3 = C_BG3}):Play()
-        TweenService:Create(s,   TI_02, {Color = C_DARK_STK}):Play()
     end)
 end
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  MODE TOGGLE
+-- ══════════════════════════════════════════════════════════════════════════
 modeBtn.MouseButton1Click:Connect(function()
     holdMode = not holdMode
     if holdMode then
         modeBtn.Text = "HOLD"
-        TweenService:Create(modeStroke, TI_02, {Color = C_AMBER_DIM}):Play()
         if clicking then
-            clicking = false
-            accum = 0
-            TweenService:Create(statusDot, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
-            TweenService:Create(mainStroke,TI_02, {Color = C_DARK_STK}):Play()
-            kpsNumber.Text = "0"; last_tier = -1
+            clicking  = false
+            accum     = 0
+            statusDot.BackgroundColor3 = C_AMBER_LO
+            kpsNumber.Text = "0"
+            last_tier = -1
         end
     else
         modeBtn.Text = "TOGGLE"
-        TweenService:Create(modeStroke, TI_02, {Color = C_DARK_STK}):Play()
     end
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  KPS CONTROLS
+-- ══════════════════════════════════════════════════════════════════════════
 local targetKPS = 80
 
 local function updateTarget(newVal)
-    targetKPS = m_clamp(newVal, 1, 2000)
+    targetKPS      = m_clamp(newVal, 1, 2000)
     targetNum.Text = tostr(targetKPS)
     kpsTarget.Text = "TARGET: " .. tostr(targetKPS)
     applyKPS(targetKPS)
@@ -595,8 +573,8 @@ local function holdButton(btn, delta)
             end
         end)
     end)
-    btn.MouseButton1Up:Connect(function() held = false end)
-    btn.MouseLeave:Connect(function() held = false end)
+    btn.MouseButton1Up:Connect(function()   held = false end)
+    btn.MouseLeave:Connect(function()       held = false end)
 end
 
 holdButton(btnMinus, -1)
@@ -617,32 +595,38 @@ for _, pd in ipairs(presetBtns) do
     end)
 end
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  START / STOP — oculta la GUI al clickear para ahorrar FPS
+-- ══════════════════════════════════════════════════════════════════════════
 local function startClicking()
     if clicking then return end
     clicking  = true
     accum     = 0
     last_tier = -1
-    TweenService:Create(statusDot,  TI_02, {BackgroundColor3 = C_AMBER}):Play()
-    TweenService:Create(mainStroke, TI_02, {Color = C_ON_STK}):Play()
+    statusDot.BackgroundColor3 = C_AMBER
+    -- Ocultar frame para liberar GPU
+    frame.Visible = false
 end
 
 local function stopClicking()
     if not clicking then return end
-    clicking = false
-    accum    = 0
-    TweenService:Create(statusDot,  TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
-    TweenService:Create(mainStroke, TI_02, {Color = C_DARK_STK}):Play()
-    TweenService:Create(kpsNumber,  TI_03, {TextColor3 = C_AMBER}):Play()
+    clicking  = false
+    accum     = 0
+    statusDot.BackgroundColor3 = C_AMBER_LO
     kpsNumber.Text = "0"
-    last_tier = -1
+    last_tier      = -1
+    -- Volver a mostrar frame
+    frame.Visible  = true
 end
 
 UIS.InputBegan:Connect(function(input, _)
     if waitingForKey then return end
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
     if input.KeyCode ~= TOGGLE_KEY then return end
-    if holdMode then startClicking()
-    else if clicking then stopClicking() else startClicking() end
+    if holdMode then
+        startClicking()
+    else
+        if clicking then stopClicking() else startClicking() end
     end
 end)
 
@@ -653,6 +637,9 @@ UIS.InputEnded:Connect(function(input)
     if holdMode then stopClicking() end
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  DRAG
+-- ══════════════════════════════════════════════════════════════════════════
 local dragActive  = false
 local dragTarget  = nil
 local dragOffsetX = 0
@@ -701,37 +688,44 @@ end)
 
 UIS.InputEnded:Connect(function(input)
     if input.UserInputType ~= Enum.UserInputType.MouseButton1 then return end
-    dragActive = false; dragTarget = nil; tbPending = false
+    dragActive = false
+    dragTarget = nil
+    tbPending  = false
 end)
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  LIVE KPS COUNTER — actualiza cada 0.2s para no gastar CPU
+-- ══════════════════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
-        task.wait(0.1)
-        if clicking then
-            local now    = hrt()
-            local cutoff = now - 1
-            local count  = 0
-            for i = 1, RING_SIZE do
-                if ring[i] > cutoff then count = count + 1 end
-            end
-            local str = tostr(count)
-            if str ~= last_count_str then
-                last_count_str = str
+        task.wait(0.2)
+        if not clicking then continue end
+        local now    = hrt()
+        local cutoff = now - 1
+        local count  = 0
+        for i = 1, RING_SIZE do
+            if ring[i] > cutoff then count = count + 1 end
+        end
+        local str = tostr(count)
+        if str ~= last_count_str then
+            last_count_str = str
+            -- Solo actualiza si la GUI está visible
+            if frame.Visible then
                 kpsNumber.Text = str
             end
-            local tier
-            if     count >= 500 then tier = 3
-            elseif count >= 200 then tier = 2
-            elseif count >= 80  then tier = 1
-            else                      tier = 0 end
-            if tier ~= last_tier then
-                last_tier = tier
-                local col = tier == 3 and C_WHITE
-                         or tier == 2 and C_AMBER
-                         or tier == 1 and C_AMBER_DIM
-                         or C_GREY
-                TweenService:Create(kpsNumber, TI_015, {TextColor3 = col}):Play()
-            end
+        end
+        local tier
+        if     count >= 500 then tier = 3
+        elseif count >= 200 then tier = 2
+        elseif count >= 80  then tier = 1
+        else                      tier = 0 end
+        if tier ~= last_tier then
+            last_tier = tier
+            local col = tier == 3 and C_WHITE
+                     or tier == 2 and C_AMBER
+                     or tier == 1 and C_AMBER_DIM
+                     or C_GREY
+            kpsNumber.TextColor3 = col
         end
     end
 end)
