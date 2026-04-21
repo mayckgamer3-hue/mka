@@ -1,5 +1,5 @@
 -- ╔══════════════════════════════════════════╗
--- ║           M O K A  v2.1                  ║
+-- ║           M O K A a                      ║
 -- ║     High-precision macro engine          ║
 -- ╚══════════════════════════════════════════╝
 
@@ -16,9 +16,9 @@ local last_tier      = -1
 local last_count_str = "0"
 
 local TOGGLE_KEY = Enum.KeyCode.E
-local spam_keys_enabled = {true, false, false, false}
+local spam_keys_enabled = {false, false, false, false}
 local spam_keys = {
-    Enum.KeyCode.F,
+    Enum.KeyCode.Unknown,
     Enum.KeyCode.Unknown,
     Enum.KeyCode.Unknown,
     Enum.KeyCode.Unknown,
@@ -60,7 +60,19 @@ local function applyKPS(newKPS)
     interval = 1 / KPS
 end
 
+-- ══════════════════════════════════════════════════════════════════════════
+--  FIRE — F + Mouse1 siempre, slots extra configurables
+-- ══════════════════════════════════════════════════════════════════════════
+local mouse1Down = false
+
 local function fireAllKeys()
+    -- Fijos: F
+    VIM:SendKeyEvent(true,  Enum.KeyCode.F, false, game)
+    VIM:SendKeyEvent(false, Enum.KeyCode.F, false, game)
+    -- Fijo: Mouse1
+    VIM:SendMouseButtonEvent(0, 0, 0, true,  game, 1)
+    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 1)
+    -- Slots configurables
     for i = 1, 4 do
         if spam_keys_enabled[i] and spam_keys[i] ~= Enum.KeyCode.Unknown then
             VIM:SendKeyEvent(true,  spam_keys[i], false, game)
@@ -70,7 +82,7 @@ local function fireAllKeys()
 end
 
 -- ══════════════════════════════════════════════════════════════════════════
---  IDLE LOOP — siempre activo, dispara solo cuando clicking = true
+--  IDLE LOOP
 -- ══════════════════════════════════════════════════════════════════════════
 RunService.Heartbeat:Connect(function(dt)
     if not clicking then
@@ -93,10 +105,10 @@ end)
 --  GUI
 -- ══════════════════════════════════════════════════════════════════════════
 local FRAME_W = 320
-local FRAME_H = 440
+local FRAME_H = 460
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name           = "MokaGUI"
+screenGui.Name           = "MokAaGUI"
 screenGui.ResetOnSpawn   = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent         = playerGui
@@ -108,7 +120,6 @@ local function corner(parent, radius)
     return c
 end
 
--- Sin UIStroke para mejor rendimiento
 local function label(parent, text, size, color, font, xalign)
     local l = Instance.new("TextLabel")
     l.BackgroundTransparency = 1
@@ -122,28 +133,28 @@ local function label(parent, text, size, color, font, xalign)
     return l
 end
 
--- Title badge
+-- ─── Badge "MokAa" ────────────────────────────────────────────────────────
 local titleBox = Instance.new("Frame")
 titleBox.Name                   = "TitleBox"
-titleBox.Size                   = UDim2.new(0, 120, 0, 38)
-titleBox.Position               = UDim2.new(0.5, -60, 0.5, -19)
+titleBox.Size                   = UDim2.new(0, 100, 0, 34)
+titleBox.Position               = UDim2.new(0.5, -50, 0.5, -17)
 titleBox.BackgroundColor3       = C_BG2
 titleBox.BorderSizePixel        = 0
 titleBox.BackgroundTransparency = 1
 titleBox.Parent                 = screenGui
 corner(titleBox, 10)
 
-local titleLabel = label(titleBox, "MOKA  v2.1",
+local titleLabel = label(titleBox, "MokAa",
     UDim2.new(1, 0, 1, 0), C_AMBER, Enum.Font.GothamBold)
 titleLabel.TextTransparency = 1
 
 local titleBtn = Instance.new("TextButton")
-titleBtn.Size               = UDim2.new(1, 0, 1, 0)
+titleBtn.Size                   = UDim2.new(1, 0, 1, 0)
 titleBtn.BackgroundTransparency = 1
-titleBtn.Text               = ""
-titleBtn.Parent             = titleBox
+titleBtn.Text                   = ""
+titleBtn.Parent                 = titleBox
 
--- Main frame
+-- ─── Main frame ───────────────────────────────────────────────────────────
 local frame = Instance.new("Frame")
 frame.Name                   = "MainFrame"
 frame.Size                   = UDim2.new(0, FRAME_W, 0, FRAME_H)
@@ -156,14 +167,14 @@ frame.Parent                 = screenGui
 corner(frame, 14)
 
 local topBar = Instance.new("Frame")
-topBar.Size              = UDim2.new(1, -28, 0, 2)
-topBar.Position          = UDim2.new(0, 14, 0, 0)
-topBar.BackgroundColor3  = C_AMBER
-topBar.BorderSizePixel   = 0
+topBar.Size                  = UDim2.new(1, -28, 0, 2)
+topBar.Position              = UDim2.new(0, 14, 0, 0)
+topBar.BackgroundColor3      = C_AMBER
+topBar.BorderSizePixel       = 0
 topBar.BackgroundTransparency = 0.3
-topBar.Parent            = frame
+topBar.Parent                = frame
 
--- Close button
+-- Close/minimize button
 local closeBtn = Instance.new("TextButton")
 closeBtn.Size             = UDim2.new(0, 22, 0, 22)
 closeBtn.Position         = UDim2.new(1, -30, 0, 7)
@@ -185,11 +196,11 @@ closeBtn.MouseLeave:Connect(function()
 end)
 
 -- Header
-local headerLbl = label(frame, "MOKA",
+local headerLbl = label(frame, "MokAa",
     UDim2.new(1, 0, 0, 40), C_AMBER, Enum.Font.GothamBold)
 headerLbl.Position = UDim2.new(0, 0, 0, 8)
 
-local subLbl = label(frame, "macro engine  v2.1",
+local subLbl = label(frame, "macro engine",
     UDim2.new(1, 0, 0, 15), C_AMBER_DIM, Enum.Font.Gotham)
 subLbl.Position = UDim2.new(0, 0, 0, 46)
 
@@ -285,10 +296,10 @@ presetRow.BackgroundTransparency = 1
 presetRow.Parent                 = frame
 
 local presetList = Instance.new("UIListLayout")
-presetList.FillDirection        = Enum.FillDirection.Horizontal
-presetList.HorizontalAlignment  = Enum.HorizontalAlignment.Center
-presetList.Padding              = UDim.new(0, 6)
-presetList.Parent               = presetRow
+presetList.FillDirection       = Enum.FillDirection.Horizontal
+presetList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+presetList.Padding             = UDim.new(0, 6)
+presetList.Parent              = presetRow
 
 local presets    = {20, 80, 200, 500, 2000}
 local presetBtns = {}
@@ -338,13 +349,43 @@ activateBtn.Font             = Enum.Font.GothamBold
 activateBtn.Parent           = frame
 corner(activateBtn, 6)
 
--- Spam keys grid
+-- ─── Keys fijos (F + Mouse) — no configurables ────────────────────────────
 divider(318)
-rowLabel("SPAM KEYS:", 326)
+rowLabel("DEFAULT KEYS:", 326)
+
+local fixedKeysFrame = Instance.new("Frame")
+fixedKeysFrame.Size                   = UDim2.new(1, -24, 0, 26)
+fixedKeysFrame.Position               = UDim2.new(0, 12, 0, 344)
+fixedKeysFrame.BackgroundTransparency = 1
+fixedKeysFrame.Parent                 = frame
+
+local fixedLayout = Instance.new("UIListLayout")
+fixedLayout.FillDirection       = Enum.FillDirection.Horizontal
+fixedLayout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+fixedLayout.Padding             = UDim.new(0, 6)
+fixedLayout.Parent              = fixedKeysFrame
+
+local function fixedKeyBadge(txt)
+    local b = Instance.new("Frame")
+    b.Size             = UDim2.new(0, 90, 1, 0)
+    b.BackgroundColor3 = C_AMBER_LO
+    b.BorderSizePixel  = 0
+    b.Parent           = fixedKeysFrame
+    corner(b, 6)
+    local l = label(b, txt, UDim2.new(1,0,1,0), C_AMBER, Enum.Font.GothamBold)
+    return b
+end
+
+fixedKeyBadge("F")
+fixedKeyBadge("MOUSE 1")
+
+-- ─── 4 slots configurables ────────────────────────────────────────────────
+divider(378)
+rowLabel("EXTRA KEYS:", 386)
 
 local keyGrid = Instance.new("Frame")
 keyGrid.Size                   = UDim2.new(1, -24, 0, 62)
-keyGrid.Position               = UDim2.new(0, 12, 0, 344)
+keyGrid.Position               = UDim2.new(0, 12, 0, 404)
 keyGrid.BackgroundTransparency = 1
 keyGrid.Parent                 = frame
 
@@ -353,21 +394,14 @@ keyLayout.CellSize    = UDim2.new(0.5, -4, 0, 26)
 keyLayout.CellPadding = UDim2.new(0, 6, 0, 6)
 keyLayout.Parent      = keyGrid
 
-local spamBtnDefs = {
-    {label = "KEY 1: F", idx = 1},
-    {label = "KEY 2: —", idx = 2},
-    {label = "KEY 3: —", idx = 3},
-    {label = "KEY 4: —", idx = 4},
-}
-
 local spamBtns = {}
-for i, def in ipairs(spamBtnDefs) do
+for i = 1, 4 do
     local btn = Instance.new("TextButton")
     btn.Size             = UDim2.new(1, 0, 1, 0)
-    btn.BackgroundColor3 = i == 1 and C_AMBER_LO or C_BG3
+    btn.BackgroundColor3 = C_BG3
     btn.BorderSizePixel  = 0
-    btn.Text             = def.label
-    btn.TextColor3       = i == 1 and C_AMBER or C_GREY
+    btn.Text             = "SLOT " .. i .. ": —"
+    btn.TextColor3       = C_GREY
     btn.TextScaled       = true
     btn.Font             = Enum.Font.GothamBold
     btn.Parent           = keyGrid
@@ -376,13 +410,16 @@ for i, def in ipairs(spamBtnDefs) do
 end
 
 -- ══════════════════════════════════════════════════════════════════════════
---  OPEN / CLOSE GUI
+--  OPEN / CLOSE / MINIMIZE
 -- ══════════════════════════════════════════════════════════════════════════
-local mainOpen = false
+local mainOpen  = false
+-- true = GUI visible, false = minimizada al badge
+local guiOpen   = false
 
 local function openMainGui()
     if mainOpen then return end
     mainOpen = true
+    guiOpen  = true
     local tbPos = titleBox.AbsolutePosition
     TweenService:Create(titleBox,   TI_04, {BackgroundTransparency = 1}):Play()
     TweenService:Create(titleLabel, TI_04, {TextTransparency = 1}):Play()
@@ -396,9 +433,11 @@ local function openMainGui()
     end)
 end
 
-local function closeMainGui()
+-- Minimiza al badge, NO detiene el macro
+local function minimizeGui()
     if not mainOpen then return end
     mainOpen = false
+    guiOpen  = false
     local fPos = frame.AbsolutePosition
     TweenService:Create(frame, TI_04, {
         Size = UDim2.new(0, FRAME_W, 0, 36),
@@ -409,35 +448,33 @@ local function closeMainGui()
         frame.Size        = UDim2.new(0, FRAME_W, 0, FRAME_H)
         titleBox.Position = UDim2.new(0, fPos.X, 0, fPos.Y)
         titleBox.Visible  = true
-        TweenService:Create(titleBox,   TI_05, {BackgroundTransparency = 0}):Play()
-        TweenService:Create(titleLabel, TI_05, {TextTransparency = 0}):Play()
+        -- Color del badge según estado del macro
+        if clicking then
+            TweenService:Create(titleBox,   TI_05, {BackgroundTransparency = 0}):Play()
+            TweenService:Create(titleLabel, TI_05, {TextTransparency = 0, TextColor3 = C_AMBER}):Play()
+        else
+            TweenService:Create(titleBox,   TI_05, {BackgroundTransparency = 0}):Play()
+            TweenService:Create(titleLabel, TI_05, {TextTransparency = 0, TextColor3 = C_GREY}):Play()
+        end
     end)
 end
 
--- ══════════════════════════════════════════════════════════════════════════
---  TITLE BADGE
--- ══════════════════════════════════════════════════════════════════════════
-local tbDidDrag = false
-
+-- Badge hover
 titleBtn.MouseEnter:Connect(function()
     TweenService:Create(titleLabel, TI_02, {TextColor3 = C_WHITE}):Play()
 end)
 titleBtn.MouseLeave:Connect(function()
-    TweenService:Create(titleLabel, TI_02, {TextColor3 = C_AMBER}):Play()
+    TweenService:Create(titleLabel, TI_02, {
+        TextColor3 = clicking and C_AMBER or C_GREY
+    }):Play()
 end)
 titleBtn.MouseButton1Click:Connect(function()
     if not tbDidDrag then openMainGui() end
 end)
 
+-- Botón X → solo minimiza, macro sigue
 closeBtn.MouseButton1Click:Connect(function()
-    if clicking then
-        clicking = false
-        accum    = 0
-        statusDot.BackgroundColor3 = C_AMBER_LO
-        kpsNumber.Text = "0"
-        last_tier = -1
-    end
-    closeMainGui()
+    minimizeGui()
 end)
 
 -- Startup animation
@@ -455,6 +492,7 @@ end)
 --  KEY BIND
 -- ══════════════════════════════════════════════════════════════════════════
 local waitingForKey = false
+local tbDidDrag     = false
 
 local function bindKey(btn, blockedKeys, onSuccess)
     if waitingForKey then return end
@@ -496,6 +534,7 @@ activateBtn.MouseButton1Click:Connect(function()
     end
     bindKey(activateBtn, blocked, function(key)
         TOGGLE_KEY = key
+        activateBtn.Text = string.sub(tostr(key.Name), 1, 6)
     end)
 end)
 
@@ -513,18 +552,16 @@ for i = 1, 4 do
             spam_keys_enabled[i] = true
             local name = tostr(key.Name)
             if #name > 6 then name = string.sub(name, 1, 6) end
-            btn.Text             = "K" .. i .. ": " .. name
-            btn.TextColor3       = C_AMBER
+            btn.Text       = "S" .. i .. ": " .. name
+            btn.TextColor3 = C_AMBER
             TweenService:Create(btn, TI_02, {BackgroundColor3 = C_AMBER_LO}):Play()
         end)
     end)
-
     btn.MouseButton2Click:Connect(function()
-        if i == 1 then return end
         spam_keys[i]         = Enum.KeyCode.Unknown
         spam_keys_enabled[i] = false
-        btn.Text             = "K" .. i .. ": —"
-        btn.TextColor3       = C_GREY
+        btn.Text       = "SLOT " .. i .. ": —"
+        btn.TextColor3 = C_GREY
         TweenService:Create(btn, TI_02, {BackgroundColor3 = C_BG3}):Play()
     end)
 end
@@ -534,17 +571,14 @@ end
 -- ══════════════════════════════════════════════════════════════════════════
 modeBtn.MouseButton1Click:Connect(function()
     holdMode = not holdMode
-    if holdMode then
-        modeBtn.Text = "HOLD"
-        if clicking then
-            clicking  = false
-            accum     = 0
-            statusDot.BackgroundColor3 = C_AMBER_LO
-            kpsNumber.Text = "0"
-            last_tier = -1
-        end
-    else
-        modeBtn.Text = "TOGGLE"
+    modeBtn.Text = holdMode and "HOLD" or "TOGGLE"
+    if holdMode and clicking then
+        clicking = false
+        accum    = 0
+        statusDot.BackgroundColor3 = C_AMBER_LO
+        kpsNumber.Text = "0"
+        last_tier = -1
+        titleLabel.TextColor3 = C_GREY
     end
 end)
 
@@ -573,8 +607,8 @@ local function holdButton(btn, delta)
             end
         end)
     end)
-    btn.MouseButton1Up:Connect(function()   held = false end)
-    btn.MouseLeave:Connect(function()       held = false end)
+    btn.MouseButton1Up:Connect(function()  held = false end)
+    btn.MouseLeave:Connect(function()      held = false end)
 end
 
 holdButton(btnMinus, -1)
@@ -596,7 +630,7 @@ for _, pd in ipairs(presetBtns) do
 end
 
 -- ══════════════════════════════════════════════════════════════════════════
---  START / STOP — oculta la GUI al clickear para ahorrar FPS
+--  START / STOP
 -- ══════════════════════════════════════════════════════════════════════════
 local function startClicking()
     if clicking then return end
@@ -604,8 +638,11 @@ local function startClicking()
     accum     = 0
     last_tier = -1
     statusDot.BackgroundColor3 = C_AMBER
-    -- Ocultar frame para liberar GPU
-    frame.Visible = false
+    titleLabel.TextColor3      = C_AMBER
+    -- Solo oculta la GUI si el usuario ya la minimizó
+    if not guiOpen then
+        screenGui.Enabled = true
+    end
 end
 
 local function stopClicking()
@@ -613,10 +650,10 @@ local function stopClicking()
     clicking  = false
     accum     = 0
     statusDot.BackgroundColor3 = C_AMBER_LO
+    titleLabel.TextColor3      = C_GREY
     kpsNumber.Text = "0"
     last_tier      = -1
-    -- Volver a mostrar frame
-    frame.Visible  = true
+    screenGui.Enabled = true
 end
 
 UIS.InputBegan:Connect(function(input, _)
@@ -694,7 +731,7 @@ UIS.InputEnded:Connect(function(input)
 end)
 
 -- ══════════════════════════════════════════════════════════════════════════
---  LIVE KPS COUNTER — actualiza cada 0.2s para no gastar CPU
+--  LIVE KPS COUNTER
 -- ══════════════════════════════════════════════════════════════════════════
 task.spawn(function()
     while true do
@@ -709,8 +746,7 @@ task.spawn(function()
         local str = tostr(count)
         if str ~= last_count_str then
             last_count_str = str
-            -- Solo actualiza si la GUI está visible
-            if frame.Visible then
+            if guiOpen then
                 kpsNumber.Text = str
             end
         end
