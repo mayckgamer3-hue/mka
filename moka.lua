@@ -1,8 +1,8 @@
 --[[
-    KRY5.2 - BLADE BALL [PREMIUM OVERLOAD EDITION]
-    - Overload Burst: 50 paquetes instantáneos al activar.
+    KRY5.2 - BLADE BALL [ABSOLUTE LIMIT - 200 BURST]
+    - Overload Burst: 200 paquetes con micro-delay (Evita el kick).
     - Estética: Navy Blue Premium & Snow Effect.
-    - Estabilidad: 0 lag, ms bajo.
+    - Estabilidad: Máxima potencia permitida por el servidor.
 ]]
 
 local Players = game:GetService("Players")
@@ -28,17 +28,14 @@ local activationKey = Enum.KeyCode.F
 local isBinding = false
 local remoteCache = getParryRemote()
 
--- ========== MOTOR DE SPAM (OVERLOAD BURST) ==========
 local function startAutoSpam()
     task.spawn(function()
-        -- OVERLOAD: Ráfaga de inicio masiva (50 paquetes)
         if remoteCache then
-            for i = 1, 50 do
-                remoteCache:FireServer()
+            for i = 1, 200 do
+                task.spawn(function() remoteCache:FireServer() end)
+                if i % 20 == 0 then task.wait(0.0001) end
             end
         end
-        
-        -- Bucle estable
         while autoSpam do
             if remoteCache then
                 for i = 1, 5 do
@@ -52,20 +49,18 @@ local function startAutoSpam()
     end)
 end
 
--- ========== GUI (PREMIUM NAVY) ==========
 local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
 ScreenGui.Name = "MokAaPremium"
 
 local Frame = Instance.new("Frame", ScreenGui)
 Frame.Size = UDim2.new(0, 260, 0, 160)
 Frame.Position = UDim2.new(0.5, -130, 0.5, -80)
-Frame.BackgroundColor3 = Color3.fromRGB(0, 15, 40) -- Navy Premium
+Frame.BackgroundColor3 = Color3.fromRGB(0, 15, 40)
 Frame.Active = true 
 Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 12)
 Instance.new("UIStroke", Frame).Color = Color3.fromRGB(0, 150, 255)
 Instance.new("UIStroke", Frame).Thickness = 2
 
--- Efecto Nieve (Premium)
 task.spawn(function()
     while true do
         local flake = Instance.new("Frame", Frame)
@@ -80,7 +75,7 @@ task.spawn(function()
             end
             flake:Destroy()
         end)
-        task.wait(0.4)
+        task.wait(1) -- CAMBIO: era 0.4
     end
 end)
 
@@ -92,7 +87,7 @@ Instance.new("UICorner", DragBar).CornerRadius = UDim.new(0, 12)
 
 local Title = Instance.new("TextLabel", DragBar)
 Title.Size = UDim2.new(1, 0, 1, 0)
-Title.Text = "KRY5.2 - OVERLOAD"
+Title.Text = "KRY5.2 - LIMITLESS"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.GothamBold
 Title.TextSize = 16
@@ -126,7 +121,7 @@ DragBar.InputBegan:Connect(function(input)
     end
 end)
 UserInputService.InputChanged:Connect(function(input)
-    if dragging and input.UserInputType == Enum.MouseMovement then
+    if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
         local delta = input.Position - dragStart
         Frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
     end
